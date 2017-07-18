@@ -1,0 +1,29 @@
+- name: install iptables
+  become: yes
+  yum:
+    name: iptables-services.x86_64
+
+- name: disable firewalld
+  become: yes
+  systemd: 
+    name: firewalld
+    masked: yes
+    state: stopped
+    enabled: no
+
+- name: enable iptables
+  become: yes
+  systemd: 
+    name: iptables
+    masked: no
+    state: started
+    enabled: yes
+
+- name: reset rules
+  become: yes
+  iptables:
+    flush: yes
+
+- name: save rules
+  become: yes
+  command: service iptables save

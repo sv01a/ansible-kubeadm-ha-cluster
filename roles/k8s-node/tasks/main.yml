@@ -1,0 +1,3 @@
+- name: join k8s 
+  command: kubeadm join --token="{{k8s_token}}" {{k8s_master_host}}:6443
+  ignore_errors: yes

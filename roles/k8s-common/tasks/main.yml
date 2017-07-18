@@ -1,0 +1,66 @@
+- name: add Kubernetes yum repo
+  yum_repository:
+    name: Kubernetes
+    description: Kubernetes
+    file: kubernetes
+    baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+    enabled: true
+    gpgcakey: https://packages.cloud.google.com/yum/doc/yum-key.gpg
+    gpgkey: https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg  
+    gpgcheck: true
+    state: present
+
+- name: disable SELinux enforcement
+  become: yes
+  selinux: state=disabled
+
+- name: install ntp
+  become: yes
+  yum:
+    name: ntp
+  notify: restart ntp service
+  when: k8s_ntp_install is defined
+
+- include: iptables.yml
+
+- name: install kubeadm stuff
+  become: yes
+  yum:
+    name: "{{item}}"
+  with_items:
+    - kubelet
+    - kubectl
+    - kubeadm
+    - kubernetes-cni
+    - bash-completion
+    - nfs-utils
+
+- name: kubeadm completion preps
+  file:
+    path: ~/.kube/
+    state: directory
+    mode: 0755
+    
+- name: kubeadm completion shell
+  shell: kubeadm completion bash > ~/.kube/kubeadm_completion.bash.inc
+  args:
+    warn: no
+
+- name: kubeadm completion to ~/.bash_profile
+  lineinfile:
+    dest: ~/.bash_profile
+    line: '[[ -x ${HOME}/.kube/kubeadm_completion.bash.inc ]] && source ${HOME}/.kube/kubeadm_completion.bash.inc'
+    state: present
+
+- name: kubectl completion shell
+  shell: kubectl completion bash > ~/.kube/completion.bash.inc
+  args:
+    warn: no
+
+- name: restart docker service
+  become: yes
+  service: name=docker state=restarted enabled=yes
+
+- name: restart kubelet service
+  become: yes
+  systemd: name=kubelet state=restarted enabled=yes daemon_reload=yes

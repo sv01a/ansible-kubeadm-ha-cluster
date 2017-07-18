@@ -1,0 +1,25 @@
+---
+
+- hosts: k8s-cluster
+  become: yes
+  roles:
+    - common
+    - k8s-common
+
+- hosts: k8s-master
+  become: yes
+  gather_facts: no
+  roles:
+    - { role: k8s-master, tags: ['k8s-master'] }
+
+- hosts: k8s-nodes
+  become: yes
+  gather_facts: no
+  roles:
+    - { role: k8s-node, tags: ['k8s-nodes'], k8s_master_host: "{{hostvars[groups['k8s-master'][0]]['ansible_host']}}" }
+
+- hosts: k8s-master
+  become: yes
+  gather_facts: no
+  roles:
+    - { role: k8s-nfs, tags: ['k8s-nfs'], k8s_nfs_host: "{{groups['k8s-nfs'][0]}}" }

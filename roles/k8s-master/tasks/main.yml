@@ -1,0 +1,61 @@
+- stat: path=/etc/kubernetes/admin.conf
+  register: kubeadm_conf
+  
+- name: init kubeadm
+  become: yes
+  shell: kubeadm init --token {{k8s_token}} --pod-network-cidr='10.244.0.0/16' --service-dns-domain cluster.local
+  when: not kubeadm_conf.stat.exists
+  
+- name: copy config
+  become: yes
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/{{ansible_user}}/admin.conf
+    owner: "{{ansible_user}}"
+    group: "{{ansible_user}}"
+    remote_src: true
+
+- name: export KUBECONFIG ~/.bash_profile
+  lineinfile: 
+    dest: ~/.bash_profile
+    line: "export KUBECONFIG=/etc/{{ansible_user}}/admin.conf"
+    state: present
+
+- name: enable pods on master
+  shell: kubectl taint nodes --all node-role.kubernetes.io/master- 
+  environment:
+    KUBECONFIG: /home/{{ansible_user}}/admin.conf
+
+- name: apply flannel networking
+  shell: kubectl apply -f {{item}}
+  with_items:
+    - https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel-rbac.yml
+    - https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+  environment:
+    KUBECONFIG: /home/{{ansible_user}}/admin.conf
+
+- name: deploy dashboard
+  shell: kubectl create -f https://raw.githubusercontent.com/kubernetes/dashboard/master/src/deploy/kubernetes-dashboard.yaml
+  environment:
+    KUBECONFIG: /home/{{ansible_user}}/admin.conf
+
+- name: remove prev heapster version folder
+  file: 
+    path: /tmp/heapster
+    state: absent
+
+- name: clone heapster
+  git:
+    repo: 'https://github.com/kubernetes/heapster.git'
+    dest: /tmp/heapster
+  ignore_errors: yes
+  
+- name: deploy heapster
+  shell: kubectl create -f /tmp/heapster/deploy/kube-config/influxdb/
+  environment:
+    KUBECONFIG: /home/{{ansible_user}}/admin.conf
+
+- name: grant role for all kube-system namespace
+  shell: kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts
+  environment:
+    KUBECONFIG: /home/{{ansible_user}}/admin.conf

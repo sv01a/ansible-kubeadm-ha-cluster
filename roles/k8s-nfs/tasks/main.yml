@@ -1,0 +1,35 @@
+- name: create directory
+  file:
+    dest: "{{ k8s_nfs_install_dir }}"
+    state: directory
+
+- name: copy nfs files
+  copy:
+    src: nfs/
+    dest: "{{ k8s_nfs_install_dir }}"
+  register: files
+
+- name: deploy nfs storage class
+  environment:
+    KUBECONFIG: /home/{{ansible_user}}/admin.conf
+  command: kubectl create -f {{ k8s_nfs_install_dir }}/{{item}}
+  with_items:
+    - serviceaccount.yaml
+    - class.yaml
+    - clusterrole.yaml
+    - clusterrolebinding.yaml
+    - deployment.yaml
+  ignore_errors: yes
+  when: files.changed
+
+- name: set k8s-nfs node as nfs ready
+  environment:
+    KUBECONFIG: /home/{{ansible_user}}/admin.conf
+  command: kubectl label --overwrite=true node {{ k8s_nfs_host }} nfs-storage=1
+  when: files.changed
+
+- name: set nfs as default storage class
+  environment:
+    KUBECONFIG: /home/{{ansible_user}}/admin.conf
+  command: "kubectl patch sc nfs -p '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"true\"}}}'"
+  when: files.changed
