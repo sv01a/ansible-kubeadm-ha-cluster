@@ -1,0 +1,47 @@
+- name: deploy kubeadm config
+  template:
+    src: kubeadm-config.yaml
+    dest: /etc/kubernetes/kubeadm-config.yaml
+
+- name: init kubeadm
+  become: yes
+  shell: kubeadm reset && kubeadm init --config=/etc/kubernetes/kubeadm-config.yaml
+
+- name: fix api config to allow to join another masters
+  become: yes
+  replace: 
+    path: /etc/kubernetes/manifests/kube-apiserver.yaml
+    regexp: '- --admission-control=Initializers,NamespaceLifecycle,LimitRanger,ServiceAccount,PersistentVolumeLabel,DefaultStorageClass,DefaultTolerationSeconds,NodeRestriction,ResourceQuota'
+    replace: '- --admission-control=NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota,DefaultTolerationSeconds'
+  when: groups['k8s-masters'] | length > 1
+  notify: 
+    - restart docker service
+    - restart kubelet service
+
+- name: ensure docker service is running
+  become: yes
+  service: 
+    name: docker 
+    state: started
+
+- name: ensure kubelet service is running
+  become: yes
+  systemd: 
+    name: kubelet
+    state: started
+
+- name: wait a little
+  wait_for: timeout=60
+  delegate_to: localhost
+
+- name: enable pods on master
+  shell: kubectl taint nodes --all node-role.kubernetes.io/master- 
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: apply flannel networking
+  shell: kubectl apply -f {{item}}
+  with_items:
+    - https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf

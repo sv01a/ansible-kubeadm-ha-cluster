@@ -1,14 +1,16 @@
-[k8s-cluster]
-master ansible_host=192.168.184.131 ansible_user=k8s
-node1 ansible_host=192.168.184.132 ansible_user=k8s
-node2 ansible_host=192.168.184.132 ansible_user=k8s
-
-[k8s-master]
-master
+[k8s-masters]
+master1 ansible_host=<master1_IP> ansible_user=k8s keepalived_interface=<master1_network_interface>
+master2 ansible_host=<master2_IP> ansible_user=k8s keepalived_interface=<master2_network_interface>
+master3 ansible_host=<master3_IP ansible_user=k8s keepalived_interface=<master3_network_interface>
 
 [k8s-nodes]
-node1
-node2
+node1 ansible_host=<node1_IP> ansible_user=k8s
+node2 ansible_host=<node1_IP> ansible_user=k8s
+node3 ansible_host=<node1_IP> ansible_user=k8s
 
-[k8s-nfs]
-node2
+[k8s-cluster:children]
+k8s-masters
+k8s-nodes
+
+[k8s-masters:vars]
+keepalived_virtualip=<keepalived_virtual_ip>

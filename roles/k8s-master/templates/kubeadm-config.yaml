@@ -1,0 +1,24 @@
+apiVersion: kubeadm.k8s.io/v1alpha1
+kind: MasterConfiguration
+kubernetesVersion: v1.7.0
+token: {{k8s_token}}
+networking:
+  podSubnet: 10.244.0.0/16
+  dnsDomain: cluster.local
+{% if groups["k8s-masters"] | length > 1 %}
+apiServerCertSANs:
+{% for master in groups["k8s-masters"] %}
+- {{hostvars[master]['ansible_host']}}
+{% endfor %}
+{% if keepalived_virtualip is defined %}
+- {{keepalived_virtualip}}
+{% endif %}
+etcd:
+  endpoints:
+{% for master in groups["k8s-masters"] %}
+  - http://{{hostvars[master]['ansible_host']}}:2379
+{% endfor %}
+{% if keepalived_virtualip is defined %}
+  - http://{{keepalived_virtualip}}:2379
+{% endif %}
+{% endif %}

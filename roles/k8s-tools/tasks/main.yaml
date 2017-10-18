@@ -1,0 +1,25 @@
+- name: deploy dashboard
+  shell: kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/master/src/deploy/recommended/kubernetes-dashboard.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: remove prev heapster version folder
+  file: 
+    path: /tmp/heapster
+    state: absent
+
+- name: clone heapster
+  git:
+    repo: 'https://github.com/kubernetes/heapster.git'
+    dest: /tmp/heapster
+  ignore_errors: yes
+  
+- name: deploy heapster
+  shell: kubectl apply -f /tmp/heapster/deploy/kube-config/rbac/heapster-rbac.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  
+- name: deploy heapster
+  shell: kubectl apply -f /tmp/heapster/deploy/kube-config/influxdb/
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf

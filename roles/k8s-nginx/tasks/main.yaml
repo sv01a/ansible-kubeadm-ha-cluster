@@ -1,0 +1,21 @@
+- name: create nginx folder
+  file:
+    path: /var/lib/nginx
+    state: directory
+
+- name: deploy nginx config
+  template:
+    src: nginx.conf
+    dest: /var/lib/nginx/nginx.conf 
+
+- name: run nginx container
+  docker_container:
+    image: nginx
+    recreate: yes
+    restart: yes
+    restart_policy: always 
+    name: nginx-k8s-lb
+    volumes:
+      - /var/lib/nginx/nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - 8443:8443

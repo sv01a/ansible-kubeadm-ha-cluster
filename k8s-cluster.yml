@@ -3,23 +3,73 @@
 - hosts: k8s-cluster
   become: yes
   roles:
-    - common
+    - ntpd
     - k8s-common
 
-- hosts: k8s-master
+# deploy external etcd cluster
+- hosts: k8s-masters
   become: yes
-  gather_facts: no
+  roles:
+    - { role: k8s-etcd, tags: ['k8s-etcd'], when: "groups['k8s-masters'] | length > 1" }
+
+# init main master
+- hosts: k8s-masters[0]
+  become: yes
   roles:
     - { role: k8s-master, tags: ['k8s-master'] }
+    - { role: k8s-tools, tags: ['k8s-tools'] }
+
+# init submasters with balancer
+- hosts: k8s-masters
+  become: yes
+  roles:
+    - { role: k8s-master, tags: ['k8s-master'], when: "groups['k8s-masters'] | length > 1" }
+    - { role: k8s-keepalived, tags: ['k8s-keepalived'], when: "groups['k8s-masters'] | length > 1" }
+    - { role: k8s-nginx, tags: ['k8s-nginx'], when: "groups['k8s-masters'] | length > 1" }
+
+- hosts: k8s-masters[0]
+  become: yes
+  tasks:
+    - name: scale pods
+      shell: kubectl scale --replicas={{groups['k8s-masters']|length}} -n kube-system {{item}}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      with_items:
+        - deployment/kube-dns
+        - deployment/kubernetes-dashboard
+        - deployment/heapster
+      when: "groups['k8s-masters'] | length > 1"
+
+    - name: save kubeproxy settings
+      shell: kubectl get -n kube-system configmap/kube-proxy -o yaml >> /tmp/kube-proxy.yaml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when: "groups['k8s-masters'] | length > 1"
+
+    - name: set kubeproxy server
+      replace: 
+        path: /tmp/kube-proxy.yaml
+        regexp: 'server: https://(.+):6443'
+        replace: 'server: https://{{keepalived_virtualip}}:8443'
+      when: "groups['k8s-masters'] | length > 1"
+
+    - name: update kubeproxy settings
+      shell: kubectl apply -f /tmp/kube-proxy.yaml && kubectl delete $(kubectl get pods -n kube-system -o name | grep kube-proxy) -n kube-system
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when: "groups['k8s-masters'] | length > 1"
+
+    - name: cleanup
+      local_action: shell rm -rf /tmp/kubernetes
 
 - hosts: k8s-nodes
   become: yes
   gather_facts: no
   roles:
-    - { role: k8s-node, tags: ['k8s-nodes'], k8s_master_host: "{{hostvars[groups['k8s-master'][0]]['ansible_host']}}" }
+    - { role: k8s-node, tags: ['k8s-nodes'], k8s_master_host: "{{hostvars[groups['k8s-masters'][0]]['ansible_host']}}" }
 
-- hosts: k8s-master
+- hosts: k8s-masters
   become: yes
   gather_facts: no
   roles:
-    - { role: k8s-nfs, tags: ['k8s-nfs'], k8s_nfs_host: "{{groups['k8s-nfs'][0]}}" }
+    - { role: k8s-nfs, tags: ['k8s-nfs'], k8s_nfs_host: "{{groups['k8s-nfs'][0]}}", when: "groups['k8s-nfs'] | length > 0" }

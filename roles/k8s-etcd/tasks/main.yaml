@@ -1,0 +1,45 @@
+- name: remove etcd folder
+  file:
+    path: /var/lib/etcd-cluster
+    state: absent
+
+- name: create etcd folder
+  file:
+    path: /var/lib/etcd-cluster
+    state: directory
+
+- set_fact:
+    initial_cluster: |
+      {% set comma = joiner(",") %}
+      {% for master in groups["k8s-masters"] -%}
+          {{ comma() }}{{master}}=http://{{hostvars[master]["ansible_host"]}}:2380
+      {%- endfor %}
+
+- name: run etcd container
+  docker_container:
+    image: gcr.io/google_containers/etcd-amd64:3.0.17
+    restart_policy: always
+    recreate: yes
+    restart: yes
+    name: etcd
+    volumes:
+      - /etc/ssl/certs:/etc/ssl/certs
+      - /var/lib/etcd-cluster:/var/lib/etcd
+    ports:
+      - 4001:4001
+      - 2380:2380
+      - 2379:2379
+    command: [
+      'etcd',
+      '--name={{inventory_hostname}}',
+      '--advertise-client-urls=http://{{ansible_host}}:2379,http://{{ansible_host}}:4001',
+      '--listen-client-urls=http://0.0.0.0:2379,http://0.0.0.0:4001',
+      '--initial-advertise-peer-urls=http://{{ansible_host}}:2380',
+      '--listen-peer-urls=http://0.0.0.0:2380',
+      '--initial-cluster-token={{etcd_token}}',
+      '--initial-cluster={{initial_cluster}}',
+      '--initial-cluster-state=new',
+      '--auto-tls',
+      '--peer-auto-tls',
+      '--data-dir=/var/lib/etcd'
+      ]

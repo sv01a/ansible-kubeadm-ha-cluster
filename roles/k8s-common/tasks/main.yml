@@ -14,13 +14,6 @@
   become: yes
   selinux: state=disabled
 
-- name: install ntp
-  become: yes
-  yum:
-    name: ntp
-  notify: restart ntp service
-  when: k8s_ntp_install is defined
-
 - include: iptables.yml
 
 - name: install kubeadm stuff
@@ -28,12 +21,13 @@
   yum:
     name: "{{item}}"
   with_items:
-    - kubelet
-    - kubectl
-    - kubeadm
-    - kubernetes-cni
+    - kubelet-1.7.5-0
+    - kubectl-1.7.5-0
+    - kubeadm-1.7.5-0
+    - kubernetes-cni-0.5.1-1
     - bash-completion
     - nfs-utils
+    - rsync
 
 - name: kubeadm completion preps
   file:
@@ -56,6 +50,12 @@
   shell: kubectl completion bash > ~/.kube/completion.bash.inc
   args:
     warn: no
+
+# - name: fix kubelet config
+#   replace: 
+#     dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+#     regexp: "KUBELET_EXTRA_ARGS"
+#     replace: "KUBELET_EXTRA_ARGS --fail-swap-on=false"
 
 - name: restart docker service
   become: yes
